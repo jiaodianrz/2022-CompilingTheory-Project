@@ -67,15 +67,6 @@ program : start{
 		printf("CHILD: %s\n", $1->child);
 		printf("LENGTH: %d\n", $1->length);
 		ROOT = $1;
-		FILE *fp;
-		fp = fopen("../vis/tree.dot", "w");
-		if(fp){
-			fprintf(fp, "digraph G{\n");
-			fprintf(fp, "node%d[label = %s]\n", count, "start");
-			traverseTree(fp, ROOT, 0);
-			fprintf(fp, "}");
-			fclose(fp);
-		}
 		printf("PARSE END");
 	}
 }
