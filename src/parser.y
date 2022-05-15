@@ -10,16 +10,9 @@ struct TreeNode
     struct TreeNode ** child;
 };
 struct TreeNode * ROOT;
-int i=1,lnum1=0, count = 0;
-int stack[100],index1=0,end[100],arr[10],ct,c,b,fl,top=0,label[20],label_num=0,ltop=0;
 
-int plist[100],k=-1,errc=0,j=0;
 extern int yylineno;
 
-//中间代码输出控件
-char st1[100][10];
-int tmp_cnt = 0;
-char temp[2]="t";
 void yyerror(char *s);
 
 struct TreeNode * createTreeNode(char * type, char * val, struct TreeNode ** child, int length)
@@ -43,33 +36,6 @@ char * getString(struct TreeNode* root){
 	else{
 		return root->type;
 	}
-}
-//一开始想用itoa()函数将数字转换为字符串
-//但发现Unix环境下没有itoa()
-//于是自己实现了一个itoa()
-char* itoa_unix(int num)
-{
-	char *str = (char *)malloc(sizeof(char)*10);
-	sprintf(str, "%d", num);
-	// printf("The itoa res is:%s", str);
-	return str;
-}
-int getType(char * s)
-{
-	int type = 0;
-	if(!(strcmp(s, "INT")))
-	{
-		type = 258;
-	}
-	if(!(strcmp(s, "FLOAT")))
-	{
-		type = 259;
-	}
-	if(!(strcmp(s, "VOID")))
-	{
-		type = 260;
-	}
-	return type;
 }
 
 %}
