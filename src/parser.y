@@ -1,7 +1,7 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include "symbolTable.c"
 struct TreeNode
 {
     char* val;
@@ -10,9 +10,16 @@ struct TreeNode
     struct TreeNode ** child;
 };
 struct TreeNode * ROOT;
+int i=1,lnum1=0, count = 0;
+int stack[100],index1=0,end[100],arr[10],ct,c,b,fl,top=0,label[20],label_num=0,ltop=0;
 
+int plist[100],k=-1,errc=0,j=0;
 extern int yylineno;
 
+//中间代码输出控件
+char st1[100][10];
+int tmp_cnt = 0;
+char temp[2]="t";
 void yyerror(char *s);
 
 struct TreeNode * createTreeNode(char * type, char * val, struct TreeNode ** child, int length)
@@ -36,6 +43,33 @@ char * getString(struct TreeNode* root){
 	else{
 		return root->type;
 	}
+}
+//一开始想用itoa()函数将数字转换为字符串
+//但发现Unix环境下没有itoa()
+//于是自己实现了一个itoa()
+char* itoa_unix(int num)
+{
+	char *str = (char *)malloc(sizeof(char)*10);
+	sprintf(str, "%d", num);
+	// printf("The itoa res is:%s", str);
+	return str;
+}
+int getType(char * s)
+{
+	int type = 0;
+	if(!(strcmp(s, "INT")))
+	{
+		type = 258;
+	}
+	if(!(strcmp(s, "FLOAT")))
+	{
+		type = 259;
+	}
+	if(!(strcmp(s, "VOID")))
+	{
+		type = 260;
+	}
+	return type;
 }
 
 %}
@@ -92,6 +126,22 @@ start : Function start {
 	;
 
 Function : Type ID LP parameter_list RP LBR StmtList RBR  {
+	int type = getType($1->val);
+	if(strcmp($2,"main")!=0)
+	{
+		printf("goto F%d\n",lnum1);
+	}
+	if (getType($1->val)!=returntype_func(ct))
+	{
+		printf("\nError : Type mismatch : Line %d\n",yylineno); errc++;
+	}
+	insert($2,FUNCTION);
+	insert($2,getType($1->val));
+	for(j=0;j<=k;j++)//插入参数
+	{
+		insert_parameter($2,plist[j]);
+	}
+	k=-1;
 	struct TreeNode * child[4];
 	child[0] = $1;
 	child[1] = createTreeNode("ID", $2, NULL, 0);
@@ -112,6 +162,10 @@ parameter_list : parameter_list COMMA parameter {
 	            | {$$ = createTreeNode("parameter_list", NULL, NULL, 0);};
 
 parameter : Type ID {
+	plist[++k]=getType($1->val);
+	int type = getType($1->val);
+	insert($2,type);
+	insertscope($2,i);
 	struct TreeNode * child[2];
 	child[0] = $1;
 	child[1] = createTreeNode("ID", $2, NULL, 0);
@@ -140,17 +194,28 @@ stmt : Declaration {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("stmt"
 		child[0] = createTreeNode("RETURN", NULL, NULL, 0);
 		child[1] = $2;
 		$$ = createTreeNode("stmt", NULL, child, 2);
+		if(!(strspn($2->val,"0123456789")==strlen($2->val)))
+			storereturn(ct,FLOAT);
+		else
+			storereturn(ct,INT); 
+		ct++;
 }
 	| RETURN SEMI {
 		struct TreeNode* child[1];
 		child[0] = createTreeNode("RETURN", NULL, NULL, 0);
 		$$ = createTreeNode("stmt", NULL, child, 1);
+		storereturn(ct,VOID); 
+		ct++;
 }
 	| RETURN ID SEMI {
 		struct TreeNode* child[2];
 		child[0] = createTreeNode("RETURN", NULL, NULL, 0);
 		child[1] = createTreeNode("ID", $2, NULL, 0);
 		$$ = createTreeNode("stmt", NULL, child, 2);
+		int sct=returnscope($2,stack[top-1]);	//stack[top-1] - current scope
+		int type=returntype($2,sct);
+		if (type==259) storereturn(ct,FLOAT);
+		else storereturn(ct,INT);
 		ct++;
 }
 	| SEMI {
@@ -238,6 +303,19 @@ assignment1 : ID VAL  E
 		child[1] = createTreeNode("VAL", "\"=\"", NULL, 0);
 		child[2] = $5;
 		$$ = createTreeNode("assignment", $1, child, 3);
+		int sct=returnscope($1,stack[index1-1]);
+		int type=returntype($1,sct);
+		if((!(strspn($5->val,"0123456789")==strlen($5->val))) && type==258 && fl==0)
+			printf("\nError : Type Mismatch : Line %d\n",yylineno);
+		if(!lookup($1))
+		{
+			int currscope=stack[index1-1];
+			int scope=returnscope($1,currscope);
+			if((scope<=currscope && end[scope]==0) && !(scope==0))
+			{
+				check_scope_update($1,$5->val,currscope);
+			}
+		}
 	}
 	;
 
@@ -256,11 +334,45 @@ Declaration : Type ID  VAL E  SEMI
 		child[2] = createTreeNode("\"=\"", NULL, NULL, 0);
 		child[3] = $6;
 		$$ = createTreeNode("Declaration", NULL, child, 4);
+		if( (!(strspn($6->val,"0123456789")==strlen($6->val))) && getType($1->val)==258 && (fl==0))
+		{
+			printf("\nError : Type Mismatch : Line %d\n",yylineno);
+			fl=1;
+		}
+		if(!lookup($2))
+		{
+			int currscope=stack[index1-1];
+			int previous_scope=returnscope($2,currscope);
+			if(currscope==previous_scope)
+				printf("\nError : Redeclaration of %s : Line %d\n",$2,yylineno);
+			else
+			{
+				insert_dup($2,getType($1->val),currscope);
+				check_scope_update($2,$6->val,stack[index1-1]);
+				int sg=returnscope($2,stack[index1-1]);
+			}
+		}
+		else
+		{
+			int scope=stack[index1-1];
+			insert($2,getType($1->val));
+			insertscope($2,scope);
+			check_scope_update($2,$6->val,stack[index1-1]);
+		}
 	}
 
 	| assignment1 SEMI  {
 		struct TreeNode* child[1] = {$1};
 		$$ = createTreeNode("declaration", NULL, child, 1);
+		if(!lookup($1->val))
+		{
+			int currscope=stack[index1-1];
+			int scope=returnscope($1->val,currscope);
+			if(!(scope<=currscope && end[scope]==0) || scope==0)
+				printf("\nError : Variable %s out of scope : Line %d\n",$1->val,yylineno);
+		}
+		else
+			printf("\nError : Undeclared Variable %s : Line %d\n",$1->val,yylineno);
 		}
 
 		| Type ID LBK index RBK SEMI {
@@ -271,6 +383,38 @@ Declaration : Type ID  VAL E  SEMI
 			child[3] = $4;
 			child[4] = createTreeNode("\"]\"", NULL, NULL, 0);
 			$$ = createTreeNode("declaration", NULL, child, 5);
+			int itype;
+			if(!(strspn($4->val,"0123456789")==strlen($4->val))) 
+				itype=259;
+			else itype = 258;
+			if(itype!=258)
+			{ 
+				printf("\nError : Array index must be of type int : Line %d\n",yylineno);
+			  	errc++;
+			}
+			if(atoi($4->val)<=0)
+			{ printf("\nError : Array index must be of type int > 0 : Line %d\n",yylineno);errc++;}
+			if(!lookup($2))
+			{
+				int currscope=stack[top-1];
+				int previous_scope=returnscope($2,currscope);
+				if(currscope==previous_scope)
+				{printf("\nError : Redeclaration of %s : Line %d\n",$2,yylineno);errc++;}
+				else
+				{
+					insert_dup($2,ARRAY,currscope);
+					insert_by_scope($2,getType($1->val),currscope);	//to insert type to the correct identifier in case of multiple entries of the identifier by using scope
+					if (itype==258) {insert_index($2,$4->val);}
+				}
+			}
+			else
+			{
+				int scope=stack[top-1];
+				insert($2,ARRAY);
+				insert($2,getType($1->val));
+				insertscope($2,scope);
+				if (itype==258) {insert_index($2,$4->val);}
+			}
 		}
 	| error {}
 	;
