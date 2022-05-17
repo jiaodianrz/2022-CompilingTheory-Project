@@ -80,7 +80,7 @@ int getType(char * s)
 }
 %token<ival> INT FLOAT VOID
 %token<str> ID NUM REAL STRING
-%token WHILE IF RETURN PREPROC LE PRINT FUNCTION DO ARRAY ELSE STRUCT STRUCT_VAR FOR GE EQ NE INC DEC AND OR
+%token WHILE IF RETURN PREPROC LE PRINT FUNCTION ARRAY ELSE BREAK STRUCT_VAR FOR GE EQ NE INC DEC AND OR
 %token LBR RBR LBK RBK LP RP COMMA SEMI MOD
 %left LE GE EQ NEQ AND OR LABK RABK
 %right VAL
@@ -189,6 +189,11 @@ stmt : Declaration {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("stmt"
 	| if {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("if", NULL, child, 1);}
 	| while {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("while", NULL, child, 1);}
 	| for {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("for", NULL, child, 1);}
+ 	| BREAK {
+		struct TreeNode* child[1];
+		child[0] = createTreeNode("BREAK", NULL, NULL, 0);
+		$$ = createTreeNode("stmt", NULL, child, 1);
+}
 	| RETURN consttype SEMI {
 		struct TreeNode* child[2];
 		child[0] = createTreeNode("RETURN", NULL, NULL, 0);
@@ -270,7 +275,11 @@ else : ELSE LBR StmtList RBR {
 	child[1] = $3;
 	$$ = createTreeNode("else", NULL, child, 2);
 }
-	| {$$ = createTreeNode("else", NULL, NULL, 0);}
+	| {
+	$$ = createTreeNode("else", NULL, NULL, 0);
+	label_num--;
+	ltop--;
+}
 	;
 
 while : WHILE LP E RP  LBR StmtList RBR {

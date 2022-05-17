@@ -37,9 +37,8 @@ int	{yylval.ival = INT; return INT;}
 float	{yylval.ival = FLOAT; return FLOAT;}
 void	{yylval.ival = VOID; return VOID;}
 else	{return ELSE;}
-do	return DO;
 if	return IF;
-struct 	return STRUCT;
+break return BREAK;
 ^"#include ".+	return PREPROC;
 while	return WHILE;
 for	return FOR;
