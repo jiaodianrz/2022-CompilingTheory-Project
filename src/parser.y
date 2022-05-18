@@ -54,6 +54,25 @@ char * getString(struct TreeNode* root){
 		return root->type;
 	}
 }
+void traverseTree(FILE* fp, struct TreeNode* root, int num)
+{
+	int i = 0;
+	if(root == NULL || root->length == 0) //The root is a leave node
+	{
+		return;
+	}
+	else
+	{
+		for(i = 0;i<root->length;i++)
+		{
+			count++;
+			fprintf(fp, "node%d[label = %s]\n", count, getString(root->child[i]));
+			fprintf(fp, "node%d -> node%d\n", num, count);
+			traverseTree(fp, root->child[i], count);
+		}
+	}
+	return;
+}
 int getType(char * s)
 {
 	int type = 0;
@@ -71,6 +90,7 @@ int getType(char * s)
 	}
 	return type;
 }
+
 /*
 scope_start:
 After entering a scope, push the scope number into the stack and increase the scopeNum
@@ -226,6 +246,7 @@ void codegen_assign()
 %right VAL
 %right UMINUS
 %left PLUS MINUS MUL DIV
+%start program
 %type<node> start Function Declaration parameter_list parameter StmtList stmt index assignment consttype E T F
 %type<node> if while for Type else array 
 %%
@@ -234,6 +255,21 @@ start -> PREPROC start: #include <XXX.h>
 start -> Function start: Function declaration
 start -> Declaration start: variable declaration 
 */
+program : start{
+	if($1->length != 0)
+	{
+		ROOT = $1;
+		FILE *fp;
+		fp = fopen("vis/tree.dot", "w");
+		if(fp){
+			fprintf(fp, "digraph G{\n");
+			fprintf(fp, "node%d[label = %s]\n", count, "start");
+			traverseTree(fp, ROOT, 0);
+			fprintf(fp, "}");
+			fclose(fp);
+		}
+	}
+}
 start : PREPROC start{
 		// printf("s->P s");
 		struct TreeNode * child[2];
