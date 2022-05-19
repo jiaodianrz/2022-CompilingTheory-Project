@@ -516,7 +516,7 @@ stmt : Declaration {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("stmt"
 		struct TreeNode* child[4];
 		child[0] = createTreeNode("SB", NULL, NULL, 0);
 		child[1] = createTreeNode("VAL", "\"=\"", NULL, 0);
-		child[2] = createTreeNode("ID", $3, NULL, 0);
+		child[2] = createTreeNode("ID", $3+1, NULL, 0);
 		child[3] = $6;
 		$$ = createTreeNode("stmt", "0", child, 4);
 		$$->isFunc = 1;
@@ -940,7 +940,7 @@ E :  E PLUS{push("+");} T
 			errc++;
 		}
 		struct TreeNode* child[2];
-		child[0] = createTreeNode("ID", $1, NULL, 0);
+		child[0] = createTreeNode("ID", $1+1, NULL, 0);
 		child[1] = $5;
 		$$ = createTreeNode("E", "0", child, 2);
 		$$->isFunc = 1;
