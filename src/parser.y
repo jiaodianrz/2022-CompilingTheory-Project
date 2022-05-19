@@ -7,18 +7,21 @@ struct TreeNode
     char* val;
     char* type;
 	int length;
+	int num;
+	int isFunc;
     struct TreeNode ** child;
 };
 struct TreeNode * ROOT;
 int i=1,lnum1=0, count = 0, fnum = 0;
 int stack[100],index1=0,end[100],arr[10],ct,c,b,fl,top=0,label[20],label_num=0,ltop=0;
-
+static char percent[50] = "%";
 int paraTypeList[100], k=-1, errc=0, j=0;
 extern int yylineno;
 extern FILE* yyout;
 //中间代码输出控件
 char st1[100][10];
 int tmp_cnt = 0, para_cnt = 0;
+int breakFlag = 0;
 char temp[2]="t";
 void yyerror(char *s);
 int yylex();
@@ -43,8 +46,10 @@ char * getString(struct TreeNode* root){
 		strcpy(nullString, "NULL");
 		return nullString;
 	}
-	if((!strcmp(root->type, "ID"))||(!strcmp(root->type, "Type"))||(!strcmp(root->type, "consttype"))){
-		return root->val;
+	if((!strcmp(root->type, "ID"))||(!strcmp(root->type, "Type"))||(!strcmp(root->type, "consttype"))||(!strcmp(root->type, "NUM"))||(!strcmp(root->type, "STRING"))){
+		char * temp = (char *)malloc(sizeof(char) * (strlen(root->val)+1));
+		strcpy(temp,root->val);
+		return temp;
 	}
 	else{
 		return root->type;
@@ -115,11 +120,11 @@ void if1()
 	label_num++;
 	strcpy(temp,"t");
 	char * res = itoa_unix(tmp_cnt);
+	strcat(temp, res);
 	fprintf(yyout, "%s = not %s\n",temp,st1[top]);
  	fprintf(yyout, "if %s goto L%d\n",temp,label_num);
 	tmp_cnt++;
 	label[++ltop]=label_num;
-
 }
 void if2()
 {
@@ -147,6 +152,7 @@ void while2()
  	fprintf(yyout, "if %s goto L%d\n",temp,label_num);
 	tmp_cnt++;
 	label[++ltop]=label_num;
+	breakFlag = label_num;
 }
 void while3()
 {
@@ -241,15 +247,15 @@ void codegen_arrayAssign()
 }
 %token<ival> INT FLOAT VOID
 %token<str> ID NUM REAL STRING
-%token WHILE IF RETURN PREPROC LE PRINT SCAN FUNCTION ARRAY ELSE FOR GE EQ AND OR
-%token LBR RBR LBK RBK LP RP COMMA SEMI
+%token WHILE IF RETURN PREPROC LE PRINT PRINTLN PRINTSP SCAND SCANF FUNCTION ARRAY ELSE FOR GE EQ AND OR BREAK
+%token LBR RBR LBK RBK LP RP COMMA SEMI SB
 %left LE GE EQ NEQ AND OR LABK RABK
 %right VAL
 %right UMINUS
 %left PLUS MINUS MUL DIV
 %start program
 %type<node> start Function Declaration parameter_list parameter StmtList stmt index assignment1 consttype E T F
-%type<node> if while for Type else array
+%type<node> if while for Type else array Idlist
 %%
 
 program : start{
@@ -257,7 +263,7 @@ program : start{
 	{
 		ROOT = $1;
 		FILE *fp;
-		fp = fopen("../vis/tree.dot", "w");
+		fp = fopen("vis/tree.dot", "w");
 		if(fp){
 			fprintf(fp, "digraph G{\n");
 			fprintf(fp, "node%d[label = %s]\n", count, "start");
@@ -278,36 +284,35 @@ start : Function start {
 		child[0] = temp;
 		child[1] = $2;
 		$$ = createTreeNode("start", NULL, child, 2); 
-	}
+}
 	| Declaration start {
 		struct TreeNode * child[2] = {$1, $2};
 		$$ = createTreeNode("start", NULL, child, 2);
-	}
+}
 	| {
 		$$ = createTreeNode("start", NULL, NULL, 0);
-	}
+}
 	;
 
-Function : Type ID LP {if(strcmp($2, "main")) fprintf(yyout, "F%d:\n", fnum++); else fprintf(yyout, "Main:\n");} parameter_list RP LBR StmtList RBR  {
+Function : Type ID LP {if(strcmp($2+1, "main")) 
+	fprintf(yyout, "F%d:\n", fnum++); 
+	else fprintf(yyout, "Main:\n");
+	insert($2+1,FUNCTION);
+	insert($2+1,getType($1->val));
+	insert($2+1,fnum);
+} parameter_list{for(j=0;j<=k;j++) {insert_parameter($2+1,paraTypeList[j]);} k=-1;} RP LBR StmtList RBR  {
+	$2 = $2 + 1;
 	int type = getType($1->val);
-	if(strcmp($2,"main")!=0)
-	{
-		fprintf(yyout, "goto F%d\n",lnum1); //Return to the calling statement
-	}
 	if (getType($1->val)!=returntype_func(ct))
 	{
-		printf("\nError : Type mismatch : Line %d\n",yylineno); errc++;
+		printf("\nError : Type mismatch : Line %d\n",yylineno); 
+		errc++;
 	}
-	insert($2,FUNCTION);
-	insert($2,getType($1->val));
-	for(j=0;j<=k;j++)
-	{insert_parameter($2,paraTypeList[j]);}
-	k=-1;
 	struct TreeNode * child[4];
 	child[0] = $1;
 	child[1] = createTreeNode("ID", $2, NULL, 0);
 	child[2] = $5;
-	child[3] = $8;
+	child[3] = $9;
 	$$ = createTreeNode("Function", NULL, child, 4);
 }
 	;
@@ -325,6 +330,7 @@ parameter_list : parameter_list COMMA parameter {
 parameter : Type ID {
 	paraTypeList[++k]=getType($1->val);
 	fprintf(yyout, "%s = a%d\n", $2, para_cnt++);
+	$2 = $2+1;
 	int type = getType($1->val);
 	insert($2,type);
 	insertscope($2,i);
@@ -333,7 +339,7 @@ parameter : Type ID {
 	child[1] = createTreeNode("ID", $2, NULL, 0);
 	$$ = createTreeNode("parameter", $2, child, 2);
 }
-	        ;
+	;
 
 Type : INT {$$ = createTreeNode("Type", "INT", NULL, 0);}
 	| FLOAT{$$ = createTreeNode("Type", "FLOAT", NULL, 0);}
@@ -346,11 +352,43 @@ StmtList : StmtList stmt{
 }
 	| {$$ = createTreeNode("StmtList", NULL, NULL, 0);}
 	;
+Idlist : Idlist COMMA ID{
+	struct TreeNode* child[2];
+	child[0] = $1;
+	child[1] = createTreeNode("ID", $3+1, NULL, 0);
+	$$ = createTreeNode("Idlist", NULL, child, 2);
+	$$->num = $1->num + 1;
+	fprintf(yyout, ",%s", $3);
+}
+		| ID{
+			struct TreeNode* child[1];
+			child[0] = createTreeNode("ID", $1+1, NULL, 0);
+			$$ = createTreeNode("Idlist", NULL, child, 1);
+			$$->num = 1;
+			fprintf(yyout, "%s", $1);
+		
+	}
+		| {$$ = createTreeNode("Idlist", NULL, NULL, 0);}
+		;
 
 stmt : Declaration {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("stmt", NULL, child, 1);}
-	| if {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("if", NULL, child, 1);}
-	| while {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("while", NULL, child, 1);}
-	| for {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("for", NULL, child, 1);}
+	| if {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("stmt", NULL, child, 1);}
+	| while {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("stmt", NULL, child, 1);}
+	| for {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("stmt", NULL, child, 1);}
+	| PRINTSP LP NUM COMMA ID RP {
+		struct TreeNode* child[3];
+		child[0] = createTreeNode("PRINTSP", NULL, NULL, 0);
+		child[1] = createTreeNode("NUM", $3, NULL, 0);
+		child[2] = createTreeNode("ID", $5+1, NULL, 0);
+		$$ = createTreeNode("stmt", NULL, child, 3);
+		fprintf(yyout, "PRINTSP %s-%s\n", $3, $5);
+	}
+	| BREAK {
+		struct TreeNode* child[1];
+		child[0] = createTreeNode("BREAK", NULL, NULL, 0);
+		$$ = createTreeNode("stmt", NULL, child, 1);
+		fprintf(yyout, "goto L%d\n", breakFlag);
+	}
 	| RETURN consttype SEMI {
 		struct TreeNode* child[2];
 		child[0] = createTreeNode("RETURN", NULL, NULL, 0);
@@ -374,9 +412,10 @@ stmt : Declaration {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("stmt"
 	| RETURN ID SEMI {
 		struct TreeNode* child[2];
 		child[0] = createTreeNode("RETURN", NULL, NULL, 0);
-		child[1] = createTreeNode("ID", $2, NULL, 0);
+		child[1] = createTreeNode("ID", $2+1, NULL, 0);
 		$$ = createTreeNode("stmt", NULL, child, 2);
 		fprintf(yyout, "RETURN %s\n", $2);
+		$2 = $2+1;
 		int sct=returnscope($2,stack[index1-1]);	//stack[index1-1] - current scope
 		int type=returntype($2,sct);
 		if (type==259) storereturn(ct,FLOAT);
@@ -388,31 +427,101 @@ stmt : Declaration {struct TreeNode* child[1] = {$1}; $$ = createTreeNode("stmt"
 		child[0] = createTreeNode("SEMI", NULL, NULL, 0);
 		$$ = createTreeNode("stmt", NULL, child, 1);
 }
-	| SCAN LP ID RP SEMI {
+	| SCAND {fprintf(yyout, "SCAND ");} LP Idlist RP SEMI {
+		fprintf(yyout, "\n");
 		struct TreeNode* child[2];
-		fprintf(yyout, "SCAN %s\n", $3);
-		child[0] = createTreeNode("SCAN", NULL, NULL, 0);
-		child[1] = createTreeNode("ID", $3, NULL, 0);
+		child[0] = createTreeNode("SCAND", NULL, NULL, 0);
+		child[1] = $4;
+		$$ = createTreeNode("stmt", NULL, child, 2);
+}
+	| SCANF {fprintf(yyout, "SCANF ");} LP Idlist RP SEMI {
+		fprintf(yyout, "\n");
+		struct TreeNode* child[2];
+		child[0] = createTreeNode("SCANF", NULL, NULL, 0);
+		child[1] = $4;
+		$$ = createTreeNode("stmt", NULL, child, 2);
+}
+	| PRINTLN LP STRING RP SEMI {
+		struct TreeNode * child[2];
+		fprintf(yyout, "PRINTSLN %s\n", $3);
+		char * str1 = strdup("\"\\\"");
+		char * str2 = strdup("\\\"\"");
+		char * temp = (char *)malloc(sizeof(char) * (strlen($3)+1));
+		strcpy(temp, $3);
+		strcat(str1, temp);
+		strcat(str1, str2);
+		child[0] = createTreeNode("PRINTLN", NULL, NULL, 0);
+		child[1] = createTreeNode("STRING", str1, NULL, 0);
+		$$ = createTreeNode("stmt", NULL, child, 2);
+	}
+	| PRINTLN LP ID RP SEMI {
+		struct TreeNode * child[2];
+		fprintf(yyout, "PRINTILN %s\n", $3);
+		char * temp = (char *)malloc(sizeof(char) * (strlen($3)+1));
+		strcpy(temp, $3);
+		child[0] = createTreeNode("PRINTLN", NULL, NULL, 0);
+		child[1] = createTreeNode("STRING", temp+1, NULL, 0);
 		$$ = createTreeNode("stmt", NULL, child, 2);
 	}
 	| PRINT LP STRING RP SEMI {
 		struct TreeNode* child[2];
-		fprintf(yyout, "PRINT %s\n", $3);
+		fprintf(yyout, "PRINTS %s\n", $3);
+		char * str1 = strdup("\"\\\"");
+		char * str2 = strdup("\\\"\"");
+		char * temp = (char *)malloc(sizeof(char) * (strlen($3)+1));
+		strcpy(temp, $3);
+		strcat(str1, temp);
+		strcat(str1, str2);
 		child[0] = createTreeNode("PRINT", NULL, NULL, 0);
-		child[1] = createTreeNode("STRING", $3, NULL, 0);
+		child[1] = createTreeNode("STRING", str1, NULL, 0);
 		$$ = createTreeNode("stmt", NULL, child, 2);
 }
 	| PRINT LP ID RP SEMI {
 		struct TreeNode* child[2];
-		fprintf(yyout, "PRINT %s\n", $3);
+		fprintf(yyout, "PRINTI %s\n", $3);
+		char * temp = (char *)malloc(sizeof(char) * (strlen($3)+1));
+		strcpy(temp, $3);
 		child[0] = createTreeNode("PRINT", NULL, NULL, 0);
-		child[1] = createTreeNode("ID", $3, NULL, 0);
+		child[1] = createTreeNode("ID", temp+1, NULL, 0);
 		$$ = createTreeNode("stmt", NULL, child, 2);
 }
 	| LBR StmtList RBR {
 		struct TreeNode* child[1] = {$2};
 		$$ = createTreeNode("stmt", NULL, child, 1);
 }
+	| SB VAL ID LP {fprintf(yyout, "param ");} Idlist RP {
+		int f_index = 0;
+		if(!lookup($3+1))
+		{
+			for(int i=0;i<n;i++)
+			{
+				if(!strcmp($3+1,st[i].symbol_name))
+				{
+					f_index = st[i].symbol_type[st[i].type_num];
+					if(st[i].parameter_num != $6->num)
+					{
+						printf("Error : Parameter Number doesn't math : Line %d\n", yylineno);
+						errc++;
+					}
+					break;
+				}
+			}
+			fprintf(yyout, "\ncall F%d\n",f_index);
+		}
+		else
+		{
+			printf("\nError : function not found : Line %d\n",yylineno);
+			errc++;
+		}
+		struct TreeNode* child[4];
+		child[0] = createTreeNode("SB", NULL, NULL, 0);
+		child[1] = createTreeNode("VAL", "\"=\"", NULL, 0);
+		child[2] = createTreeNode("ID", $3, NULL, 0);
+		child[3] = $6;
+		$$ = createTreeNode("stmt", "0", child, 4);
+		$$->isFunc = 1;
+
+	}	
 	;
 
 
@@ -444,7 +553,11 @@ else : ELSE LBR StmtList RBR {if3();} {
 	child[1] = $3;
 	$$ = createTreeNode("else", NULL, child, 2);
 }
-	| {$$ = createTreeNode("else", NULL, NULL, 0);}
+	| {
+		$$ = createTreeNode("else", NULL, NULL, 0);
+		label_num--;
+		ltop--;
+	}
 	;
 
 while : WHILE {while1();}LP E RP {while2();} LBR StmtList RBR {while3();} {
@@ -457,11 +570,14 @@ while : WHILE {while1();}LP E RP {while2();} LBR StmtList RBR {while3();} {
 	;
 
 index : ID {
-	if(lookup($1))
-	printf("\nUndeclared Variable %s : Line %d\n",$1,yylineno);
+	if(lookup($1+1))
+	{
+		printf("\nUndeclared Variable %s : Line %d\n",$1+1,yylineno);
+		errc++;
+	}
 	struct TreeNode* child[1];
 	child[0] = createTreeNode("ID", NULL, NULL, 0);
-	$$ = createTreeNode("index", $1, child, 1);
+	$$ = createTreeNode("index", $1+1, child, 1);
 }
 	| consttype{
 	struct TreeNode* child[1] = {$1};
@@ -471,7 +587,15 @@ index : ID {
 
 
 assignment1 : ID {push($1);} VAL {push("=");} E {
-		codegen_assign();
+		if($5->isFunc!=1)
+		{
+			codegen_assign();
+		}
+		else
+		{
+			fprintf(yyout, " -> %s\n", $1);
+		}
+		$1 = $1+1;
 		struct TreeNode* child[3];
 		child[0] = createTreeNode("ID", $1, NULL, 0);
 		child[1] = createTreeNode("VAL", "\"=\"", NULL, 0);
@@ -480,7 +604,10 @@ assignment1 : ID {push($1);} VAL {push("=");} E {
 		int sct=returnscope($1,stack[index1-1]);
 		int type=returntype($1,sct);
 		if((!(strspn($5->val,"0123456789")==strlen($5->val))) && type==258 && fl==0)
+		{
 			printf("\nError : Type Mismatch : Line %d\n",yylineno);
+			errc++;
+		}
 		if(!lookup($1))
 		{
 			int currscope=stack[index1-1];
@@ -494,6 +621,7 @@ assignment1 : ID {push($1);} VAL {push("=");} E {
 	| ID {push($1);} LBK E  RBK VAL {push("=");} E {
 		codegen_arrayAssign();
 		struct TreeNode* child[6];
+		$1 = $1+1;
 		child[0] = createTreeNode("ID", $1, NULL, 0);
 		child[1] = createTreeNode("\"[\"", NULL, NULL, 0);
 		child[2] = $4;
@@ -504,7 +632,10 @@ assignment1 : ID {push($1);} VAL {push("=");} E {
 		int sct=returnscope($1,stack[index1-1]);
 		int type=returntype($1,sct);
 		if((!(strspn($8->val,"0123456789")==strlen($8->val))) && type==258 && fl==0)
+		{
 			printf("\nError : Type Mismatch : Line %d\n",yylineno);
+			errc++;
+		}
 		if(!lookup($1))
 		{
 			int currscope=stack[index1-1];
@@ -517,6 +648,8 @@ assignment1 : ID {push($1);} VAL {push("=");} E {
 	}
 	;
 
+
+
 consttype : NUM {$$ = createTreeNode("consttype", $1, NULL, 0);}
 	| REAL {$$ = createTreeNode("consttype", $1, NULL, 0);}
 	;
@@ -525,6 +658,7 @@ Declaration : Type ID {push($2);} VAL {push("=");} E {codegen_assign();} SEMI
 	{
 		int type = 0;
 		struct TreeNode* child[4];
+		$2 = $2+1;
 		child[0] = $1;
 		child[1] = createTreeNode("ID", $2, NULL, 0);
 		child[2] = createTreeNode("\"=\"", NULL, NULL, 0);
@@ -533,6 +667,7 @@ Declaration : Type ID {push($2);} VAL {push("=");} E {codegen_assign();} SEMI
 		if( (!(strspn($6->val,"0123456789")==strlen($6->val))) && getType($1->val)==258 && (fl==0))
 		{
 			printf("\nError : Type Mismatch : Line %d\n",yylineno);
+			errc++;
 			fl=1;
 		}
 		if(!lookup($2))
@@ -540,7 +675,10 @@ Declaration : Type ID {push($2);} VAL {push("=");} E {codegen_assign();} SEMI
 			int currscope=stack[index1-1];
 			int previous_scope=returnscope($2,currscope);
 			if(currscope==previous_scope)
+			{
 				printf("\nError : Redeclaration of %s : Line %d\n",$2,yylineno);
+				errc++;
+			}
 			else
 			{
 				insert_dup($2,getType($1->val),currscope);
@@ -557,16 +695,28 @@ Declaration : Type ID {push($2);} VAL {push("=");} E {codegen_assign();} SEMI
 		}
 	}
 	| Type ID SEMI {
+		$2 = $2 + 1;
 		struct TreeNode* child[2];
 		child[0] = $1;
-		child[1] = createTreeNode("ID", $1->val, NULL, 0);
+		child[1] = createTreeNode("ID", $2, NULL, 0);
 		$$ = createTreeNode("Declaration", NULL, child, 2);
+		if(!strcmp($1->val, "INT"))
+		{
+			fprintf(yyout, "%s = 0\n", $2 - 1);
+		}
+		else if(!strcmp($1->val, "FLOAT"))
+		{
+			fprintf(yyout, "%s = 0.0\n", $2 - 1);
+		}
 		if(!lookup($2))
 		{
 			int currscope=stack[index1-1];
 			int previous_scope=returnscope($2,currscope);
 			if(currscope==previous_scope)
+			{
 				printf("\nError : Redeclaration of %s : Line %d\n",$2,yylineno);
+				errc++;
+			}
 			else
 			{
 				insert_dup($2,getType($1->val),currscope);
@@ -588,13 +738,20 @@ Declaration : Type ID {push($2);} VAL {push("=");} E {codegen_assign();} SEMI
 			int currscope=stack[index1-1];
 			int scope=returnscope($1->val,currscope);
 			if(!(scope<=currscope && end[scope]==0) || scope==0)
+			{
 				printf("\nError : Variable %s out of scope : Line %d\n",$1->val,yylineno);
+				errc++;
+			}
 		}
 		else
+		{
 			printf("\nError : Undeclared Variable %s : Line %d\n",$1->val,yylineno);
+			errc++;
+		}
 		}
 
 		| Type ID LBK index RBK SEMI {
+			$2 = $2+1;
 			struct TreeNode* child[5];
 			child[0] = $1;
 			child[1] = createTreeNode("ID", $2, NULL, 0);
@@ -610,6 +767,17 @@ Declaration : Type ID {push($2);} VAL {push("=");} E {codegen_assign();} SEMI
 			{ 
 				printf("\nError : Array index must be of type int : Line %d\n",yylineno);
 			  	errc++;
+			}
+			else
+			{
+				if(!strcmp($1->val, "INT"))
+				{
+					fprintf(yyout, "DECLI %s:%s\n", $2-1, $4->val);
+				}
+				else if(!strcmp($1->val, "FLOAT"))
+				{
+					fprintf(yyout, "DECLF %s:%s\n", $2-1, $4->val);
+				}
 			}
 			if(atoi($4->val)<=0)
 			{ printf("\nError : Array index must be of type int > 0 : Line %d\n",yylineno);errc++;}
@@ -640,9 +808,9 @@ Declaration : Type ID {push($2);} VAL {push("=");} E {codegen_assign();} SEMI
 
 array : ID {push($1);}LBK E RBK{
 	struct TreeNode* child[2];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = $4;
-	$$ = createTreeNode("Array", $1, child, 2);
+	$$ = createTreeNode("Array", $1+1, child, 2);
 }
 	;
 
@@ -678,7 +846,7 @@ E :  E PLUS{push("+");} T
    | ID {push($1);} LE 		{push("<=");} E {
 	codegen();
 	struct TreeNode* child[3];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = createTreeNode("\"<=\"", NULL, NULL, 0);
 	child[2] = $5;
 	$$ = createTreeNode("E", $5->val, child, 3);
@@ -686,7 +854,7 @@ E :  E PLUS{push("+");} T
    | ID {push($1);} GE 		{push(">=");} E {
 	codegen();
 	struct TreeNode* child[3];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = createTreeNode("\">=\"", NULL, NULL, 0);
 	child[2] = $5;
 	$$ = createTreeNode("E", $5->val, child, 3);
@@ -694,7 +862,7 @@ E :  E PLUS{push("+");} T
    | ID {push($1);} EQ 		{push("==");} E {
 	codegen();
 	struct TreeNode* child[3];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = createTreeNode("\"==\"", NULL, NULL, 0);
 	child[2] = $5;
 	$$ = createTreeNode("E", $5->val, child, 3);
@@ -702,7 +870,7 @@ E :  E PLUS{push("+");} T
    | ID {push($1);} NEQ 	{push("!=");} E {
 	codegen();
 	struct TreeNode* child[3];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = createTreeNode("\"!=\"", NULL, NULL, 0);
 	child[2] = $5;
 	$$ = createTreeNode("E", $5->val, child, 3);
@@ -710,7 +878,7 @@ E :  E PLUS{push("+");} T
    | ID {push($1);} AND 	{push("&&");} E {
 	codegen();
 	struct TreeNode* child[3];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = createTreeNode("\"&&\"", NULL, NULL, 0);
 	child[2] = $5;
 	$$ = createTreeNode("E", $5->val, child, 3);
@@ -718,7 +886,7 @@ E :  E PLUS{push("+");} T
    | ID {push($1);} OR 		{push("||");} E {
 	codegen();
 	struct TreeNode* child[3];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = createTreeNode("\"||\"", NULL, NULL, 0);
 	child[2] = $5;
 	$$ = createTreeNode("E", $5->val, child, 3);
@@ -726,7 +894,7 @@ E :  E PLUS{push("+");} T
    | ID {push($1);} LABK 	{push("<");}  E {
 	codegen();
 	struct TreeNode* child[3];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = createTreeNode("\"<\"", NULL, NULL, 0);
 	child[2] = $5;
 	$$ = createTreeNode("E", $5->val, child, 3);
@@ -734,7 +902,7 @@ E :  E PLUS{push("+");} T
    | ID {push($1);} RABK 	{push(">");}  E {
 	codegen();
 	struct TreeNode* child[3];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = createTreeNode("\">\"", NULL, NULL, 0);
 	child[2] = $5;
 	$$ = createTreeNode("E", NULL, child, 3);
@@ -742,17 +910,49 @@ E :  E PLUS{push("+");} T
    | ID {push($1);} VAL 	{push("=");}  E {
 	codegen_assign();
 	struct TreeNode* child[3];
-	child[0] = createTreeNode("ID", $1, NULL, 0);
+	child[0] = createTreeNode("ID", $1+1, NULL, 0);
 	child[1] = createTreeNode("\"=\"", NULL, NULL, 0);
 	child[2] = $5;
 	$$ = createTreeNode("E", $5->val, child, 3);
 }
+	| ID {push($1);} LP {fprintf(yyout, "param ");} Idlist RP{
+		int f_index = 0;
+		if(!lookup($1+1))
+		{
+			for(int i=0;i<n;i++)
+			{
+				if(!strcmp($1+1,st[i].symbol_name))
+				{
+					f_index = st[i].symbol_type[st[i].type_num];
+					if(st[i].parameter_num != $5->num)
+					{
+						printf("Error: Parameter Number doesn't math Line : %d\n", yylineno);
+						errc++;
+					}
+					break;
+				}
+			}
+			fprintf(yyout, "\ncall F%d",f_index);
+		}
+		else
+		{
+			printf("\nError : function not found : Line %d\n",yylineno);
+			errc++;
+		}
+		struct TreeNode* child[2];
+		child[0] = createTreeNode("ID", $1, NULL, 0);
+		child[1] = $5;
+		$$ = createTreeNode("E", "0", child, 2);
+		$$->isFunc = 1;
+	}
    | array {
 	array1();
 	struct TreeNode* child[1] = {$1};
 	$$ = createTreeNode("E", $1->val, child, 1);
 }
    ;
+
+
 T :  T MUL{push("*");} F
 {
 	codegen();
@@ -798,7 +998,8 @@ F :  LP E RP {
    }
    | ID {
 	   struct TreeNode* child[1];
-	   child[0] = createTreeNode("ID", $1, NULL, 0);
+	   char *temp = strdup($1);
+	   child[0] = createTreeNode("ID", temp+1, NULL, 0);
 	   $$=createTreeNode("F", $1, child, 1);
 	   push($1);
 	   fl=1;
@@ -823,22 +1024,28 @@ int yywrap()
 }
 int main(int argc, char *argv[])
 {
+	int ptr = 0;
 	yyin =fopen(argv[1],"r");
 	int len = strlen(argv[1])-2;
-	char temp[40], dest[20];
-	strcpy(temp, "../IR/");
-	sprintf(dest, "%s", argv[1]);
+	char temp[40];
+	char * dest = (char *)malloc(sizeof(char) * 20);
+	strcpy(temp, "IR/");
+	strcpy(dest, argv[1]);
+	for(int i = 0;i<strlen(argv[1]);i++)
+	{
+		if(argv[1][i] == '/')
+		{
+			ptr = i;
+		}
+	}
+	dest += ptr+1;
 	strcat(dest,".tac");
 	strcat(temp, dest);
 	yyout = fopen(temp, "w+");
-	yyparse();
+	/* yyparse(); */
 	if(!yyparse())
 	{
 		printf("\nParsing Done With %d Error\n", errc);
-	}
-	else
-	{
-		printf("Error\n");
 	}
 	fclose(yyout);
 	fclose(yyin);
@@ -849,4 +1056,3 @@ void yyerror(char *s)
 {
 	printf("\nLine %d : %s %s\n",yylineno,s,yytext);
 }
-
